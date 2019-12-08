@@ -1,0 +1,40 @@
+---
+title: "The Good, The Bad, The Ugly coding with R"
+author: "Ehsan Jahanpour"
+date: "11/27/2019"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+  pdf_document: default
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+"The amount of data being generated and stored is growing exponentially", this is the phrase we keep hearing. The data/information explosion has brought a lot of chanllanges in processing large amount of data and made our "fun" process of data analysis into an "OK" work. If you are feeling the same, you are not alone and that is why I am writing this blog. We need to change our programming habbits to be able to "Make Data Analysis Great Again!". That is why I will try my best to explain why, when, and how to apply parallel computing. Let's get back to the topic:
+
+![](../images/data_explosion.png)
+
+## Why & When
+
+### Why parallel computing?
+
+```{r cars}
+summary(cars)
+```
+
+### When to Parallelize?
+
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+
+## Parallel packages in R
