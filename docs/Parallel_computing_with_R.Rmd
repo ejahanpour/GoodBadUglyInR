@@ -1,5 +1,9 @@
 ---
 title: "The Good, The Bad, The Ugly coding with R"
+knit: (function(input_file, encoding) {
+  rmarkdown::render(input_file,
+ encoding=encoding,
+ output_file=file.path(dirname(input_file), 'index.html'))})
 author: "Ehsan Jahanpour"
 date: "11/27/2019"
 output:
