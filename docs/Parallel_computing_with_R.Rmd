@@ -17,6 +17,9 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(doParallel)
+library(foreach)
 ```
 
 ## Introduction
@@ -40,10 +43,80 @@ The world is expanding and so the programming languages and methods. The good me
 Following the cinematic schema of the blog, I would like to use movie data to illustrate how parallelization can be used to make our lives less dramatic. The dataset I am using here is downloaded from [CMU Movie Summary Corpus](http://www.cs.cmu.edu/~ark/personas/data/MovieSummaries.tar.gz). For more information about the dataset please visit the page. The plot summary of the movies are stored in `plto_summaries.txt` file. I have only using the first 1000 summaries from that file:
 
 ```{r movies}
-sample = read.csv('../sample_plot_summmary.csv')
-print(sample[1, 2])
+# sample = read.csv('../sample_plot_summmary.csv'
+plot_summary <- read.table('../data/plot_summaries.txt', sep = '\t')
+row_number <- seq(100, nrow(plot_summary)/10, by= 100)
+
 ```
 
+```{r function}
+text_features <- function(text){
+  words_to_search <- c('johannesburg', 'world war')
+  reg_word <- paste0(words_to_search, collapse = '|')
+  word_exists <- grepl(reg_word, tolower(text))
+  word_count <- sapply(strsplit(tolower(text), " "), length)
+  return(c(word_exists, word_count))
+}
+```
+
+```{r ugly}
+run_time1 <- numeric(length(row_number))
+ugly_script <- function(sample) {
+  return(system.time(
+    for (i in 1:nrow(sample)) {
+      sample[i, c('keyword', 'word_counts')] <- text_features(sample[i, 2])
+    }
+  )[[3]])
+}
+for (i in 1:length(row_number))
+{
+  run_time1[i] = ugly_script(plot_summary[1:row_number[i],])
+}
+``` 
+
+```{r bad}
+run_time2 <- numeric(length(row_number))
+bad_script <- function(sample) {
+  return(
+    system.time(
+      sample[, c('keyword', 'word_count')] <- mapply(text_features, sample[, 2])
+  )[[3]])
+}
+for (i in 1:length(row_number))
+{
+  run_time2[i] = bad_script(plot_summary[1:row_number[i],])
+}
+
+``` 
+
+```{r good}
+run_time3 <- numeric(length(row_number))
+
+num_cores <- parallel::detectCores() 
+good_script <- function(sample) {
+  return(system.time({
+    registerDoParallel(num_cores)
+    foreach (i = 1:nrow(sample)) %dopar% {
+      sample[i, c('keyword_good', 'word_count')] <- text_features(sample[i, 2])
+    }
+  }
+  )[3])
+}
+for (i in 1:length(row_number))
+{
+  run_time3[i] = good_script(plot_summary[1:row_number[i],])
+}
+
+``` 
+
+```{r visualization}
+x <- 1:length(run_time1)
+plot(x, run_time1, type = 'l', col = 'blue')
+lines(x, run_time2, type = 'l', col = 'red')
+lines(x, run_time3, type = 'l', col = 'green')
+legend(x=1.5, y=1.5, legend=c("for", "mapply", 'dopar'), col = c('blue', 'red', 'green'), lty=1)
+
+```
 ### Why parallel computing?
 
 ```{r cars}
