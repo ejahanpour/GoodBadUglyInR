@@ -20,6 +20,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(ggplot2)
 library(doParallel)
 library(foreach)
+library(reshape2)
 ```
 
 ## Introduction
@@ -60,61 +61,64 @@ text_features <- function(text){
 ```
 
 ```{r ugly}
-run_time1 <- numeric(length(row_number))
-ugly_script <- function(sample) {
+single_loop_script <- function(sample) {
   return(system.time(
     for (i in 1:nrow(sample)) {
       sample[i, c('keyword', 'word_counts')] <- text_features(sample[i, 2])
     }
-  )[[3]])
-}
-for (i in 1:length(row_number))
-{
-  run_time1[i] = ugly_script(plot_summary[1:row_number[i],])
+  ))
 }
 ``` 
 
 ```{r bad}
-run_time2 <- numeric(length(row_number))
-bad_script <- function(sample) {
+mapply_script <- function(sample) {
   return(
     system.time(
       sample[, c('keyword', 'word_count')] <- mapply(text_features, sample[, 2])
-  )[[3]])
-}
-for (i in 1:length(row_number))
-{
-  run_time2[i] = bad_script(plot_summary[1:row_number[i],])
+  ))
 }
 
 ``` 
 
 ```{r good}
-run_time3 <- numeric(length(row_number))
-
 num_cores <- parallel::detectCores() 
-good_script <- function(sample) {
+parallel_loop_script <- function(sample) {
   return(system.time({
     registerDoParallel(num_cores)
     foreach (i = 1:nrow(sample)) %dopar% {
       sample[i, c('keyword_good', 'word_count')] <- text_features(sample[i, 2])
     }
   }
-  )[3])
+  ))
 }
-for (i in 1:length(row_number))
-{
-  run_time3[i] = good_script(plot_summary[1:row_number[i],])
-}
-
 ``` 
 
+```{r timeline}
+# If foreach is netter let's change the behavior and use it while we can
+runtime_list <- foreach (i = 1:length(row_number)) %dopar%
+{
+  for_single <- single_loop_script(plot_summary[1:row_number[i],])
+  apply_method <- mapply_script(plot_summary[1:row_number[i],])
+  for_parrallel <- parallel_loop_script(plot_summary[1:row_number[i],])
+  return(list(i, for_single[[3]], apply_method[[3]], for_parrallel[[3]]))
+}
+```
+
+
 ```{r visualization}
-x <- 1:length(run_time1)
-plot(x, run_time1, type = 'l', col = 'blue')
-lines(x, run_time2, type = 'l', col = 'red')
-lines(x, run_time3, type = 'l', col = 'green')
-legend(x=1.5, y=1.5, legend=c("for", "mapply", 'dopar'), col = c('blue', 'red', 'green'), lty=1)
+# change the list of lists to dataframe
+runtime_df <- do.call(rbind.data.frame, runtime_list)
+names(runtime_df) <- c('index', 'single_loop', 'mapply', 'parallel_loop')
+
+# need to melt the dataframe to be able to line plot them
+melted <- reshape2::melt(runtime_df, measure.vars = c('single_loop', 'mapply', 'parallel_loop'))
+ggplot(melted, aes(index, value, color = variable)) +
+  geom_line(aes(group = paste0(variable)))
+# x <- 1:length(run_time1)
+# plot(x, run_time1, type = 'l', col = 'blue')
+# lines(x, run_time2, type = 'l', col = 'red')
+# lines(x, run_time3, type = 'l', col = 'green')
+# legend(x=1.5, y=1.5, legend=c("for", "mapply", 'dopar'), col = c('blue', 'red', 'green'), lty=1)
 
 ```
 ### Why parallel computing?
