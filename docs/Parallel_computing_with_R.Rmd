@@ -21,6 +21,8 @@ library(ggplot2)
 library(doParallel)
 library(foreach)
 library(reshape2)
+num_cores <- parallel::detectCores() 
+registerDoParallel(num_cores)
 ```
 
 ## Introduction
@@ -46,7 +48,7 @@ Following the cinematic schema of the blog, I would like to use movie data to il
 ```{r movies}
 # sample = read.csv('../sample_plot_summmary.csv'
 plot_summary <- read.table('../data/plot_summaries.txt', sep = '\t')
-row_number <- seq(100, nrow(plot_summary)/10, by= 100)
+row_number <- seq(100, nrow(plot_summary), by= 100)
 
 ```
 
@@ -62,48 +64,47 @@ text_features <- function(text){
 
 ```{r ugly}
 single_loop_script <- function(sample) {
-  return(system.time(
-    for (i in 1:nrow(sample)) {
+    for (i in 1:nrow(sample))
       sample[i, c('keyword', 'word_counts')] <- text_features(sample[i, 2])
-    }
-  ))
+    return(sample)
 }
 ``` 
 
 ```{r bad}
 mapply_script <- function(sample) {
-  return(
-    system.time(
-      sample[, c('keyword', 'word_count')] <- mapply(text_features, sample[, 2])
-  ))
+  sample[, c('keyword', 'word_count')] <- mapply(text_features, sample[, 2])
+  return(sample)
 }
 
 ``` 
 
+
 ```{r good}
-num_cores <- parallel::detectCores() 
 parallel_loop_script <- function(sample) {
-  return(system.time({
     registerDoParallel(num_cores)
-    foreach (i = 1:nrow(sample)) %dopar% {
-      sample[i, c('keyword_good', 'word_count')] <- text_features(sample[i, 2])
-    }
+    extracts <- foreach (i = 1:nrow(sample), .combine = rbind) %dopar%
+      text_features(sample[i, 2])
+    #Change the list to dataframes
+    # extract_df <- do.call(rbind.data.frame, extracts)
+    return(as.data.frame(extracts))
   }
-  ))
-}
 ``` 
 
 ```{r timeline}
-# If foreach is netter let's change the behavior and use it while we can
+
+# If foreach is better let's change the behavior and use it while we can
 runtime_list <- foreach (i = 1:length(row_number)) %dopar%
 {
-  for_single <- single_loop_script(plot_summary[1:row_number[i],])
-  apply_method <- mapply_script(plot_summary[1:row_number[i],])
-  for_parrallel <- parallel_loop_script(plot_summary[1:row_number[i],])
-  return(list(i, for_single[[3]], apply_method[[3]], for_parrallel[[3]]))
+  for_single <- system.time(single_loop_script(plot_summary[1:row_number[i],]))
+  mapply_method <- system.time(mapply_script(plot_summary[1:row_number[i],]))
+  for_parrallel <- system.time(parallel_loop_script(plot_summary[1:row_number[i],]))
+  return(list(i, for_single[[3]], mapply_method[[3]], for_parrallel[[3]]))
 }
 ```
 
+
+
+### Why parallel computing?
 
 ```{r visualization}
 # change the list of lists to dataframe
@@ -119,11 +120,6 @@ ggplot(melted, aes(index, value, color = variable)) +
 # lines(x, run_time2, type = 'l', col = 'red')
 # lines(x, run_time3, type = 'l', col = 'green')
 # legend(x=1.5, y=1.5, legend=c("for", "mapply", 'dopar'), col = c('blue', 'red', 'green'), lty=1)
-
-```
-### Why parallel computing?
-
-```{r cars}
 
 ```
 
