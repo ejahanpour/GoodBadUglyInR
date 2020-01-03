@@ -15,7 +15,7 @@ editor_options:
   chunk_output_type: inline
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, echo=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(ggplot2)
 library(doParallel)
@@ -30,27 +30,29 @@ registerDoParallel(num_cores)
 Once upon a time in Hollywood, it was adequate for statisticians, data analysts, physicians, ... to
 
 a. pull up the Rstudio, 
-b. `write.csv()` the file, 
+b. `read.csv()` the file, 
 c. for loop into the files and 
 d. apply statistical analytics and draw inference from data and experiments. 
 
-The world is expanding and so the programming languages and methods. The good methodology in the past could get very ugly nowadays without us noticing that. We need to understand the nature of the problem, data available, and types of studies and select the best tool to solve that.  
+Since then, the universe has been expanding and so the programming languages and methods. With great power comes great responsibilities (challanges) though. The good methodology in the past is getting really ugly nowadays without us noticing that. Thus, for us (as reasearchers, data enthusiasts, scientists, ...) there is modern need to understand the nature of the problem, the quality/size of the data in hand, philosophy, pros and cons of different methods. Well, the end goal is to select the best tool to solve those problems, also never forget *Correlation does not ALWAYS imply causations, though sometimes it does*. I am writing this blog trying to change our programming habbits with the hope "Make Data Analysis Great Again!". I will try my best to explain why, when, and how to apply parallel computing
 
-"The amount of data being generated and stored is growing exponentially", this is the phrase we keep hearing. The data/information explosion has brought a lot of challenges in processing large amount of data and made our "fun" process of data analysis into an "OK" daily task. If you feel the same, you are not alone and that is why I am writing this blog. We need to change our programming habbits to be able to "Make Data Analysis Great Again!". I will try my best to explain why, when, and how to apply parallel computing. Let's get back to the topic:
 
-![](../images/data_explosion.png)
+![](../images/Picture1.png)
 
 
 ## Why & When
 
-Following the cinematic schema of the blog, I would like to use movie data to illustrate how parallelization can be used to make our lives less dramatic. The dataset I am using here is downloaded from [CMU Movie Summary Corpus](http://www.cs.cmu.edu/~ark/personas/data/MovieSummaries.tar.gz). For more information about the dataset please visit the page. The plot summary of the movies are stored in `plto_summaries.txt` file. I have only using the first 1000 summaries from that file:
+Following the cinematic schema of the blog, I would like to use movie data to illustrate how parallelization can be usefull to make our lives less dramatic. The dataset I am using here is downloaded from [CMU Movie Summary Corpus](http://www.cs.cmu.edu/~ark/personas/data/MovieSummaries.tar.gz). For more information about the dataset please visit the page. The plot summary of the movies are stored in `plto_summaries.txt` file. Let's take a look at the first two lines of the table:
 
 ```{r movies}
-# sample = read.csv('../sample_plot_summmary.csv'
+# plot_summary = read.csv('../sample_plot_summmary.csv')
 plot_summary <- read.table('../data/plot_summaries.txt', sep = '\t')
+plot_summary <- data.table::fread('../data/plot_summaries.txt', header = FALSE)
 row_number <- seq(100, nrow(plot_summary), by= 100)
-
+knitr::kable(head(plot_summary, n=2L)) 
 ```
+
+As the table above shows, the table includes the movie id and plot summary. Using some imagination and crativity, there are lots of cool things we can do from those plot summaries, such as finding the movies with similar subjects, categorizing the movies (re-inventing the wheel!! not so great), training a model to create new plots. Well, that might be interesting to see a movie that is written by an AI model. However, for all those cool stuffs, we need to read in the data rows and extract some features out of them. For simplicity, let's suppose I naively think **world war** and **Johannesburg** are THE two keywords going to help my model with clustering the movies, and the other feature is number of words in the summary plot!! (well I assume this was the techniques during pre-deep learning era to "extracct" features from text). I write those down as a *text_features* function below:
 
 ```{r function}
 text_features <- function(text){
