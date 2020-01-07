@@ -39,20 +39,35 @@ Since then, the universe has been expanding and so the programming languages and
 
 ![](../images/Picture1.png)
 
+## Three ... Two ... One .... Action (Data Import)
 
-## Why & When
-
-Following the cinematic schema of the blog, I would like to use movie data to illustrate how parallelization can be usefull to make our lives less dramatic. The dataset I am using here is downloaded from [CMU Movie Summary Corpus](http://www.cs.cmu.edu/~ark/personas/data/MovieSummaries.tar.gz). For more information about the dataset please visit the page. The plot summary of the movies are stored in `plto_summaries.txt` file. Let's take a look at the first two lines of the table:
+Following the cinematic schema of the blog, I would like to use movie data to illustrate how parallelization can be usefull to make our lives less dramatic. The dataset I am using here is downloaded from [CMU Movie Summary Corpus](http://www.cs.cmu.edu/~ark/personas/data/MovieSummaries.tar.gz). They stated in their page that there are 42,306 rows of plot summaries availanle in the txt file. For more information about the dataset please visit the page. The plot summary of the movies are stored in `plto_summaries.txt` file. Let's take a look at the first two lines of the table:
 
 ```{r movies}
 # plot_summary = read.csv('../sample_plot_summmary.csv')
-plot_summary <- read.table('../data/plot_summaries.txt', sep = '\t')
-plot_summary <- data.table::fread('../data/plot_summaries.txt', header = FALSE)
-row_number <- seq(100, nrow(plot_summary), by= 100)
-knitr::kable(head(plot_summary, n=2L)) 
+system.time(plot_summary <- read.table('../data/plot_summaries.txt', sep = '\t'))
+cat(paste('read.table with sep, table dimension', list(dim(plot_summary)), 'Incorrect and slow- Ugly'))
+system.time(plot_summary <- read.delim2('../data/plot_summaries.txt', sep = '\t'))
+cat(paste('read.delim2 with sep, table dimension', list(dim(plot_summary)), 'Incorrect and slow - Ugly'))
+system.time(plot_summary <- read.table('../data/plot_summaries.txt', sep = '\t', quote = ''))
+cat(paste('using read.table with quote options, table dimension', list(dim(plot_summary)), 'Correct but slow - Bad'))
+system.time(plot_summary <- data.table::fread('../data/plot_summaries.txt', header = FALSE, quote = ''))
+cat(paste('using fread with quote options, table dimension', list(dim(plot_summary)), 'Correct and Fast - Good'))
 ```
 
-As the table above shows, the table includes the movie id and plot summary. Using some imagination and crativity, there are lots of cool things we can do from those plot summaries, such as finding the movies with similar subjects, categorizing the movies (re-inventing the wheel!! not so great), training a model to create new plots. Well, that might be interesting to see a movie that is written by an AI model. However, for all those cool stuffs, we need to read in the data rows and extract some features out of them. For simplicity, let's suppose I naively think **world war** and **Johannesburg** are THE two keywords going to help my model with clustering the movies, and the other feature is number of words in the summary plot!! (well I assume this was the techniques during pre-deep learning era to "extracct" features from text). I write those down as a *text_features* function below:
+Ok, as you can see there are a lot of Good, bad and ugly way to read in the data from data source. especially when you are dealing with real and dirty data. The take home here is `DO NOT NEGLECT EOF within quoted string` warning as it might result in not reading the whole data into your program. if you would like to find out why, read the paragraph below, otherwise feel free to skip that.
+
+But what does 'EOF within quoted string' statement tell us and why we are seeing three different row numbers for tables? they are all due to quotations!! (either single or double quotes). In a perfect world, you would close any quote that you "opened". But, hey, we are not leaving in a perfect world! So it is possible to open a quotation mark and not close it. or is `'` in `John's book` a quote? No at all. So, in first `read.table` the default quotes are `' and "`, thus, if the function sees one of those marks in a row, it will look for another quotation mark to close it and if could not find it (number of quotation marks are odd), it will go to the next row to match. That causes lots of rows to be considered as on row and only gets rows instead of 42,306 rows. Same story happens with `read.delim2`, the only difference is the default quote for `?read.delim2` is only `"` that reduce the chance of unclosed quotation marks and we see more rows appear (The Uglies). Changing the `quote` argument will fix the issue and reduce the running time by 3rd, great tha we are now pulling data correctly with better with better performance! But wait!! 10 seconds (The Bad)?!! can we do better? Thanks to the `fread` function of `data.table` package, we can speed up data reading 76 times faster (The Good).
+
+## Plot Summary
+
+```{r plot_summaries}
+plot_summary <- as.data.frame(plot_summary)
+row_number <- seq(10000, nrow(plot_summary), by= 10000)
+knitr::kable(head(plot_summary, n=2L)) 
+```
+As the table above shows, the table includes the movie id and plot summary. Using some imagination and crativity, there are lots of cool things we can do from those plot summaries, such as finding the movies with similar subjects, categorizing the movies (re-inventing the wheel!! not so great), training a model to create new plots. Well, that might be interesting to see a movie that is written by an AI model. However, for all those cool stuffs, we need to read in the data rows and extract some features out of them. For simplicity, let's suppose I naively think **world war** and **Johannesburg** are THE two keywords going to help my model with clustering the movies, and the other feature is number of words in the summary plot!! (well, this was, literally, the techniques during pre-deep learning era to "extract" features from text). I write those down as a *text_features* function below:
+
 
 ```{r function}
 text_features <- function(text){
@@ -64,6 +79,12 @@ text_features <- function(text){
 }
 ```
 
+## Normal Exposure (Feature Extraction from Movie Plots)
+
+So far, we have created a function that extract "our" features on a single text. Now, it is time to go over the data.frame rows and apply that function to the plot summaries of each movie. This is one of the major applications of the loop in any programming languages. So, the first option comes to any mind is using for loop. However, there is very ugly way to do that. As another take home message *TRY TO AVOID FOR LOOPS IN R AS MUCH AS YOU CAN, unless you are familiar with primitive functions and stuff*. I will briefly explain it in the next paragraph, but if you would like to skip it, please feel free to do so.
+
+According to Hadley Wickham's (Advanced R)[http://adv-r.had.co.nz/memory.html#modification] "For loops in R have a reputation for being slow. Often that slowness is because you’re modifying a copy instead of modifying in place." The function below is applying *for loops* on a data.frame. Since data.frame is quasi-built-in type of data in R, and not a primitive function developed in C, each time for loop is gone through, a new COPY of sample is created and `keyword and word_counts` columns are updated. That makes the single_loop_script really slow and ugly.
+
 ```{r ugly}
 single_loop_script <- function(sample) {
     for (i in 1:nrow(sample))
@@ -71,6 +92,10 @@ single_loop_script <- function(sample) {
     return(sample)
 }
 ``` 
+
+each of the tasks (feature extraction) in the for loop is independant, thus, there is a chance to speed up the process through parallelizing the process. If you would like to dig deeper in the parallilzation, please check out this awesome [page](http://www.parallelr.com/r-with-parallel-computing/)
+
+The apply functions in R don't provide improved performance over other looping functions (e.g. for). One exception to this is lapply which can be a little faster because it does more work in C code than in R
 
 ```{r bad}
 mapply_script <- function(sample) {
@@ -80,11 +105,17 @@ mapply_script <- function(sample) {
 
 ``` 
 
+implementation of parallel code that runs locally on a single multi-processor (multi-cores) computer using the `doParallel` library. This package provides a parallel backend for the `foreach` package 
 
+Sending tasks out to another processesor and have work to be done there takes some time and there’s some work involved, thus we don’t want to parallelizing things that already runs really fast sequentially. Especially in R where some functions can be vectorized. You will only get a substantial speed up if `text_feature` takes enough time for the overhead to be worth it
+
+As each processor will get a copy of the vector that we’ve passed in, if we modify the data inplace, it will simply be modifying the copy instead of the original vector.
+
+So the better way to do this is to simply have function that returns the information from the parallelized task.
 ```{r good}
 parallel_loop_script <- function(sample) {
-    registerDoParallel(num_cores)
-    extracts <- foreach (i = 1:nrow(sample), .combine = rbind) %dopar%
+    doParallel::registerDoParallel(num_cores)
+    extracts <- foreach::foreach (i = 1:nrow(sample), .combine = rbind) %dopar%
       text_features(sample[i, 2])
     #Change the list to dataframes
     # extract_df <- do.call(rbind.data.frame, extracts)
@@ -126,6 +157,13 @@ ggplot(melted, aes(index, value, color = variable)) +
 ```
 
 ### When to Parallelize?
+
+So when working on code parallelization it is important to keep in mind that for very short jobs, the parallelization overhead will diminish the parallelization benefits. If we’re not sure if the parallelization of specific piece of code improves its speed, we can always check the execution time using system.time().
+
+When we pass in our data to run a parallel task, each processors will get a copy of the data, thus it’s not going to modify the global/intial data in any way.
+
+Vectorization is another way to speed up the execution time in R
+
 
 
 ## Parallel packages in R
