@@ -1,11 +1,11 @@
 ---
-title: "The Good, The Bad, The Ugly with R"
+title: "The Good, The Bad, The Ugly in R"
 knit: (function(input_file, encoding) {
   rmarkdown::render(input_file,
  encoding=encoding,
  output_file=file.path(dirname(input_file), 'index.html'))})
 author: "Ehsan Jahanpour"
-date: "12/08/2019"
+date: "01/07/2020"
 output:
   html_document: 
     toc: true
@@ -21,69 +21,82 @@ library(ggplot2)
 library(doParallel)
 library(foreach)
 library(reshape2)
+library(dplyr)
 num_cores <- parallel::detectCores() 
 registerDoParallel(num_cores)
 ```
 
-## Introduction
+## Prologue
 
-Once upon a time in Hollywood, it was adequate for statisticians, data analysts, physicians, ... to
+Once upon a time in the world ... it was adequate for physicians, researchers, statisticians, data analysts, ... to
 
 a. pull up the Rstudio, 
-b. `read.csv()` the file, 
-c. for loop into the files and 
-d. apply statistical analytics and draw inference from data and experiments. 
+b. `read.csv()` csv file or `read.table` other formats, 
+c. for loop into rows and columns of the files 
+d. apply statistical analysis and draw inference from observations/experiments. 
 
-Since then, the universe has been expanding and so the programming languages and methods. With great power comes great responsibilities (challanges) though. The good methodology in the past is getting really ugly nowadays without us noticing that. Thus, for us (as reasearchers, data enthusiasts, scientists, ...) there is modern need to understand the nature of the problem, the quality/size of the data in hand, philosophy, pros and cons of different methods. Well, the end goal is to select the best tool to solve those problems, also never forget *Correlation does not ALWAYS imply causations, though sometimes it does*. I am writing this blog trying to change our programming habbits with the hope "Make Data Analysis Great Again!". I will try my best to explain why, when, and how to apply parallel computing
+Since then, the universe has been expanding and so the programming languages and methods. With great power comes great responsibilities though. The good old methodologies are getting really ugly pretty fast. The lovely task of selecting the best tool to solve those problems are becoming a challenge. So, for survival purpose, human beings need to understand the nature of the problem, the quality/size of datasets and available methods with their philosophy and pros & cons. On top of those, there is a need to remind that *Correlation does not always imply causations, though sometimes it does*. As we are dwelling with all those challenges, sharing solutions and best practices could change the programming habbits with the hope to "Make Data Analytics Great Again!". Well, let's start the show:
 
 
-![](../images/Picture1.png)
+![](../images/MoviePic.png)
 
 ## Three / Two / One / Action (Data Import)
 
-Following the cinematic schema of the blog, I would like to use movie data to illustrate how parallelization can be usefull to make our lives less dramatic. The dataset I am using here is downloaded from [CMU Movie Summary Corpus](http://www.cs.cmu.edu/~ark/personas/data/MovieSummaries.tar.gz). They stated in their page that there are 42,306 rows of plot summaries availanle in the txt file. For more information about the dataset please visit the page. The plot summary of the movies are stored in `plto_summaries.txt` file. Let's take a look at the first two lines of the table:
+Following the cinematic schema of this blog, I would like to use movie data to illustrate how parallelization can make our lives less dramatic. The dataset I am using here is downloaded from [CMU Movie Summary Corpus](http://www.cs.cmu.edu/~ark/personas/data/MovieSummaries.tar.gz). They stated in their page that there are 42,306 rows of plot summaries available in the txt file. For detailed information about the dataset please visit the page. First, let's go ahead and import the file. Doing a quick search returns handful reading packages, but why? Let's try some of those:
 
-```{r movies}
-# plot_summary = read.csv('../sample_plot_summmary.csv')
+```{r movies, eval=FALSE}
+#### Read data using typical tab-seperated read.table with default inputs 
 system.time(plot_summary <- read.table('../data/plot_summaries.txt', sep = '\t'))
-cat(paste('read.table with sep, table dimension', list(dim(plot_summary)), 'Incorrect and slow- Ugly'))
+print(paste('read.table with sep, table dimension', 
+            list(dim(plot_summary)), 
+            'Incorrect and slow- Ugly'))
+#### Read data using tab-seperated read.delim2 function with default inputs 
 system.time(plot_summary <- read.delim2('../data/plot_summaries.txt', sep = '\t'))
-cat(paste('read.delim2 with sep, table dimension', list(dim(plot_summary)), 'Incorrect and slow - Ugly'))
+print(paste('read.delim2 with sep, table dimension', 
+            list(dim(plot_summary)), 
+            'Incorrect and slow - Ugly'))
+#### Read data using tab-seperated read.delim2 function with no quote requirements
 system.time(plot_summary <- read.table('../data/plot_summaries.txt', sep = '\t', quote = ''))
-cat(paste('using read.table with quote options, table dimension', list(dim(plot_summary)), 'Correct but slow - Bad'))
+print(paste('using read.table with quote options, table dimension', 
+            list(dim(plot_summary)), 
+            'Correct but slow - Bad'))
+#### Read data using fread with no quote requirements 
 system.time(plot_summary <- data.table::fread('../data/plot_summaries.txt', header = FALSE, quote = ''))
-cat(paste('using fread with quote options, table dimension', list(dim(plot_summary)), 'Correct and Fast - Good'))
+print(paste('using fread with quote options, table dimension', 
+            list(dim(plot_summary)), 
+            'Correct and Fast - Good'))
 ```
+![](../images/ReadinTime.png)
 
-Ok, as you can see there are a lot of Good, bad and ugly way to read in the data from data source. especially when you are dealing with real and dirty data. The take home here is `DO NOT NEGLECT EOF within quoted string` warning as it might result in not reading the whole data into your program. if you would like to find out why, read the paragraph below, otherwise feel free to skip that.
+As you can see above, there are Good, bad and ugly ways to read in data especially when you are dealing with large and dirty data. **I should confess that the concept of good, bad, and ugly here is dependant on dataset though seeing the advantages and disadvantages of each method can be really eye-opening**. The first two reading functions are throwing warnings and the number of rows do not match with the real data!! First thing first: `DO NOT ignore EOF within quoted string` warning as it might result in wrong analytics down in your code. If you would like to find out why, read the paragraph below, otherwise feel free to skip that and proceed to data section.
 
-*optional* But what does 'EOF within quoted string' statement tell us and why we are seeing three different row numbers for tables? they are all due to quotations!! (either single or double quotes). In a perfect world, you would close any quote that you "opened". But, hey, we are not leaving in a perfect world! So it is possible to open a quotation mark and not close it. or is `'` in `John's book` a quote? No at all. So, in first `read.table` the default quotes are `' and "`, thus, if the function sees one of those marks in a row, it will look for another quotation mark to close it and if could not find it (number of quotation marks are odd), it will go to the next row to match. That causes lots of rows to be considered as on row and only gets rows instead of 42,306 rows. Same story happens with `read.delim2`, the only difference is the default quote for `?read.delim2` is only `"` that reduce the chance of unclosed quotation marks and we see more rows appear (The Uglies). Changing the `quote` argument will fix the issue and reduce the running time by 3rd, great tha we are now pulling data correctly with better with better performance! But wait!! 10 seconds (The Bad)?!! can we do better? Thanks to the `fread` function of `data.table` package, we can speed up data reading 76 times faster (The Good).
+*optional* But what does 'EOF within quoted string' statement tell us and why are we seeing three different row numbers on the same dataset? they are all due to quotations!! (either single or double quotes). In a perfect world, you would close any quote you "opened" earlier but we are not leaving in a perfect world! So it is possible to open a quotation mark without closing it. In addition, not all quotation markes are used for quotes, for instance `'` in `John's book` is not used for quote. In `read.table` function, the default quotes are `' and "`, thus, if the function sees one of those symbols in a row, it will look for another one to close it and if could not find it, it will go to the next row to find the match. That might cause multiple rows to be considered as one row (14,094 rows). Same story happens with `read.delim2`, the only difference is that the default quote for `read.delim2` is only `"` which reduces the chance of unclosed quotation marks and we see more rows appear (20,474 rows). Setting `quote = ''` argument will fix the issue and reduce the running time by 3rd. It is great that we are now pulling data correctly and faster! But wait!! can we do better than 10 seconds? Thanks to the `fread` function of `data.table` package, we can speed up data reading 76 times more faster.
 
 ## Plot Summary
 
-```{r plot_summaries}
-plot_summary <- as.data.frame(plot_summary)
-row_number <- seq(10000, nrow(plot_summary), by= 10000)
-knitr::kable(head(plot_summary, n=2L)) 
+```{r plot_summaries, eval = FALSE}
+knitr::kable(head(plot_summary, n=2L)) %>% kableExtra::kable_styling()
 ```
-As the table above shows, the table includes the movie id and plot summary. Using some imagination and creativity, there are lots of cool things we can do from those plot summaries, such as grouping the movies with similar subjects, finding a movie about a specific topic for a Sunday afternoon, categorizing the movies (re-inventing the wheel!! not so great), training a model to create a new plot. Well, that might be interesting to see a movie that is written by an AI model. However, for all those cool stuffs, we need to read in the data and extract some features out of them. For simplicity, let's suppose I naively think **world war** and **Johannesburg** are THE two keywords going to help my model with clustering the movies along with number of words in the summary plot!! (well, this was, literally, the techniques during pre-deep learning era to "create" features from text). *extract_text_features* function is generating those features from a text:
+
+![](../images/table_view.png)
+The table above includes the movie id and plot summary. Using some imagination and creativity, we can do lots of cool analytics, such as grouping the movies with similar subjects, developing Rshiny app to find a movie about a specific topic for a Sunday afternoon, categorizing the movies with a movie2Vec concept and/or training a model to create a new plot. Well, that might be interesting to see a movie that is written by an AI model. However, for all those cool stuffs, we need to clean the data and extract some features out of them. For simplicity, let's suppose I naively think **world war** and **Johannesburg** are two keywords going to help my model with clustering the movies along with number of words in the summary plot!! *extract_text_features* function is generating those features from a text:
 
 
 ```{r function}
 extract_text_features <- function(text){
   words_to_search <- c('johannesburg', 'world war')
-  reg_word <- paste0(words_to_search, collapse = '|')
-  word_exists <- grepl(reg_word, tolower(text))
+  regex_word <- paste0(words_to_search, collapse = '|')
+  word_exists <- grepl(regex_word, tolower(text))
   word_count <- sapply(strsplit(tolower(text), " "), length)
   return(c(word_exists, word_count))
 }
 ```
 
-## Exposure (Feature Extraction from Movie Plots)
+## Good, bad, ugly feature extraction {#main}
 
-So far, we have created a function that extract "our" features on a single text. Now, it is time to go over each row in dataframe and apply the function on plot summaries. This is one of the major applications of the loop in any programming language. So, the first option comes to any mind is using for loop. However, this could get really ugly. As another take home message *TRY TO AVOID "FOR LOOPS" IN R AS MUCH AS YOU CAN, unless you are familiar with primitive functions and stuff*. I will briefly explain it in the next paragraph, but if you would like to skip it, please feel free to do so.
+So far, we have created a function that extract "our" features on a single text. Now, it is time to go over each row in dataframe and apply the function on plot summaries (the classic application of loops). So, the first option comes to the mind is using for loop. Caution!, this could get really ugly. TL:DR: *TRY TO AVOID "FOR LOOPS" in R unless you are familiar with primitive functions or dataset is small enough*. I will briefly explain it in the next paragraph, but there is no heartbreak in skipping it.
 
-*optional* According to Hadley Wickham's (Advanced R)[http://adv-r.had.co.nz/memory.html#modification] "For loops in R have a reputation for being slow. Often that slowness is because you’re modifying a copy instead of modifying in place." The function below is applying *for loops* on a dataframe. Since dataframe is quasi-built-in type of data in R, and not a primitive function developed in C, each time for loop is being compiled, a new COPY of sample is created and `keyword and word_counts` columns are updated (Thanks to updates on R 3.1.0. the copy is not deep anymore). Imaging you are building a wall from scratch in a new place anytime you would like to add or change a brick on it. That makes the function really slow and ugly.
+*optional* According to Hadley Wickham's (Advanced R)[http://adv-r.had.co.nz/memory.html#modification] "For loops in R have a reputation for being slow. Often that slowness is because you’re modifying a copy instead of modifying in place". As an example, the function below is applying *for loops* on a dataframe. Since dataframe is quasi-built-in type of data in R and not a primitive function developed in C, each time for loop is being compiled, a new COPY of sample is created and `keyword and word_counts` columns are being updated (Thanks to updates on R 3.1.0. the copy is not deep anymore). Imaging you are building a wall from scratch in a new place anytime you would like to add or change a brick on it. That makes the function really slow and ugly.
 
 ```{r ugly}
 for_on_dataframe <- function(sample) {
@@ -93,7 +106,7 @@ for_on_dataframe <- function(sample) {
 }
 ``` 
 
-As discussed above, using for loop on dataframes could really get upgly (as your data size increases) mainly due to running codes in R and creating unnecessary objects. However, we might be able to improve the performance through changing `data.frame` to `list` or using apply family functions. The apply functions in R don't provide improved performance over other looping functions (e.g. for). It is mentioned in some resources that lapply can be a little faster because it does more work in C code than in R. The chunk below includes 2 functions from apply family: `lapply` and `mapply (a multivariate form of sapplt)` and for loop on list item. The performance improved on large data sources though there is not a significant difference between those functions. All those functions are better than the ugly "for on large dataframe" function though they are only using one of the cores and still The bad. Well, if you do not run R on a device with a single-core!! CPU. 
+As discussed above, using for loops on "dataframes" could get really ugly as your data size increases. However, we might be able to improve the performance through changing `data.frame` to `list` objects or using apply family functions. The apply functions in R generally don't provide improved performance over other loop functions although it is stated in some resources that lapply can be a little faster because it does more work in C code than in R. The chunk below includes 2 functions from apply family: `lapply` and `mapply (a multivariate form of sapply)` and a for loop on list item. 
 
 ```{r bad}
 lapply_script <- function(sample) {
@@ -116,10 +129,10 @@ for_on_list <- function(sample) {
 }
 ``` 
 
-Each of feature extraction tasks in the for loop is independant, thus, we might be able to speed up the process through parallelizing the process. If you would like to dig deeper in the parallilzation, please check out this awesome [page](http://www.parallelr.com/r-with-parallel-computing/). The code chunk below is using `doParallel` library to implement parallel code that runs locally on a single multi-processor (multi-cores) computer. The package also provides a parallel backend for the `foreach` package. in spite of it's great advantages, parallelizing R processes have some challanges that we need to keep in mind.  
+Obviously, `extract_text_feature` tasks can be done independantly on each plot summary. We might be able to speed up the process through parallelizing the tasks on a machine with multiple cores. If you would like to dig deeper in the parallilzation, please check out this awesome [page](http://www.parallelr.com/r-with-parallel-computing/). The code chunk below is using `doParallel` library to implement parallel code and provide a parallel backend for the `foreach` package. In spite of it's great advantages, parallelizing R processes have some challanges that we need to keep in mind. Again, feel free to skip the next paragraph if you are in a rush.  
 
 
-I think, there are two main caveats in using parallel processes: a) mapping the task among multiple cores and collecting the results back usually take time and work. We would get a substantial speed up if the task (`extract_text_features` function in this example) takes enough time for the overhead to be worth it. Also, accessing global variables and dealing with global state will necessarily be different than single thread execution. As each processor will get a copy of the vector that we’ve passed in, if we modify the data inplace, it will simply be modifying the copy instead of the original vector. To overcome data handling issues within cores, we should set the `foreach` in a way that it returns the information from the parallelized task:
+*optional* I have personally dealt with two main caveats in using parallel processes: a) mapping the task among multiple cores and reducing the results back usually take time and work. We would only get a substantial speed up if the task (`extract_text_features` function in this example) takes enough time for the overhead to be worth it. If you are interested in estimating the overhead time, you should look into the difference between `elapsed - user - system` of the **Current session** in 5 element `proc.time` function (at least in Unix OS). The print format of system.time only includes total execution time of all sessions in different cores and might not tell the detailed story. b) Accessing global variables and dealing with global state will be different than single thread execution. As each processor will get a copy of the vector that we’ve passed in, if we modify the data inplace, it will simply be modifying the copy instead of the original vector. To overcome data handling issues within cores, we should set the `foreach` in a way that it returns the information from the parallelized task:
 
 >      extracts <- foreach::foreach (i = 1:nrow(sample), .combine = rbind) %dopar%
 >      extract_text_features(sample[i, 2])
@@ -131,14 +144,19 @@ parallel_loop_script <- function(sample) {
     extracts <- foreach::foreach (i = 1:nrow(sample), .combine = rbind) %dopar%
       extract_text_features(sample[i, 2])
     return(as.data.frame(extracts))
-  }
+}
 ``` 
 
-### Why parallel computing?
+### Special (or Parallel) Effects
 
-Now, Let's go ahead and assess the performance of each loop executaion. We categorized the loops into The Good 
+Now, Let's go ahead and assess the performance of each loop function. We categorized the loops into The Good, The Bad, The Ugly. Although the logic behind the good, bad, and ugly is independant, the functions could be ugly in a dataset and "good enough" in another one.
 
 ```{r timeline}
+plot_summary <- data.table::fread('../data/plot_summaries.txt', header = FALSE, quote = '')
+plot_summary <- as.data.frame(plot_summary)
+batch_size <- 6000
+row_number <- seq(batch_size, nrow(plot_summary), by= batch_size)
+
 
 # If foreach is better let's change the behavior and use it while we can
 runtime_list <- foreach (i = 1:length(row_number)) %dopar%
@@ -156,12 +174,14 @@ runtime_list <- foreach (i = 1:length(row_number)) %dopar%
 ```{r visualization}
 # change the list of lists to dataframe
 runtime_df <- do.call(rbind.data.frame, runtime_list)
-names(runtime_df) <- c('index', 'for_dataframe', 'lapply', 'mapply', 'for_list', 'parallel_loop')
+names(runtime_df) <- c('index', 'for_dataframe', 'lapply+do.call', 'mapply', 'for_list', 'parallel_loop')
 
 # need to melt the dataframe to be able to line plot them
-melted <- reshape2::melt(runtime_df, measure.vars = c('for_dataframe', 'lapply', 'mapply', 'for_list', 'parallel_loop'))
-ggplot(melted, aes(index, value, color = variable)) +
-  geom_line(aes(group = paste0(variable)))
+melted <- reshape2::melt(runtime_df, measure.vars = c('for_dataframe', 'lapply+do.call', 'mapply', 'for_list', 'parallel_loop'))
+ggplot(melted, aes(batch_size*index, value, color = variable)) +
+  geom_line(aes(group = paste0(variable))) +
+  xlab('Number of summary plots') + ylab('execution time (seconds)') +
+  ggtitle('Execution time of loop functions as text dataset gets large')
 # x <- 1:length(run_time1)
 # plot(x, run_time1, type = 'l', col = 'blue')
 # lines(x, run_time2, type = 'l', col = 'red')
@@ -170,9 +190,11 @@ ggplot(melted, aes(index, value, color = variable)) +
 
 ```
 
-### When to Parallelize?
+As figure above shows, "for loop on dataframea" has the ugliest performance at any size of the dataset. "for loop on list" and apply functions are performing better although there is not a big difference between them. The worse performance of `lapply` is because the `do.call(rbind)` function is also used to bind the results of the function. So, it does not deny it's possible & slight advantage to the other apply family functions. The parallel implementation is providing the best performance as we are using all cores of the machine (in this example, I am running the scripts on a 8-core MacBook Pro with 2.8 GHz intel Core i7 and 16 GB 2133MHz DDR3 RAM). We have, thoroughly, discussed the reasons behind the performance of each set of implementations in [Good, bad, ugly feature extraction](#main). 
 
-we don’t want to parallelizing things that already runs really fast sequentially. In other words, it would be better to take advantage of other techniques (primitive functions, vectorization, data.table packages) before parallelizing the process.
+### Ending
+
+We could improve the performance of extracting text feature by 6 times. we don’t want to parallelizing things that already runs really fast sequentially. In other words, it would be better to take advantage of other techniques (primitive functions, vectorization, data.table packages) before parallelizing the process.
 
 So when working on code parallelization it is important to keep in mind that for very short jobs, the parallelization overhead will diminish the parallelization benefits. If we’re not sure if the parallelization of specific piece of code improves its speed, we can always check the execution time using system.time().
 
@@ -182,6 +204,6 @@ Vectorization, writing C++ function using RCPP or using parallel format of apply
 
 
 
-## Parallel packages in R
+## denouement (Parallel packages)
 
-(This Link)[https://cran.r-project.org/web/views/HighPerformanceComputing.html] lists the packages being developed for high performance computation in R. if you enjoyed the topic and would like to learn more about it, please visit the cran page.  
+Special care and packages are required when we are dealing with very large problems. There are plenty of packages have taken advantage of parallilization or out of memory data hadling processes (not discussed in this tutorial). (This Link)[https://cran.r-project.org/web/views/HighPerformanceComputing.html] lists the packages being developed for high performance computation in R. if you enjoyed the topic and would like to learn more about it, please visit the cran page.  
