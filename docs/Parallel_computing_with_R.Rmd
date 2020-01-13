@@ -154,7 +154,7 @@ Now, Let's go ahead and assess the performance of each loop function. We categor
 ```{r timeline}
 plot_summary <- data.table::fread('../data/plot_summaries.txt', header = FALSE, quote = '')
 plot_summary <- as.data.frame(plot_summary)
-batch_size <- 6000
+batch_size <- 4000
 row_number <- seq(batch_size, nrow(plot_summary), by= batch_size)
 
 
