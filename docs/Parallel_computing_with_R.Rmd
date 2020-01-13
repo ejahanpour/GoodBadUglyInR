@@ -190,17 +190,15 @@ ggplot(melted, aes(batch_size*index, value, color = variable)) +
 
 ```
 
-As figure above shows, "for loop on dataframea" has the ugliest performance at any size of the dataset. "for loop on list" and apply functions are performing better although there is not a big difference between them. The worse performance of `lapply` is because the `do.call(rbind)` function is also used to bind the results of the function. So, it does not deny it's possible & slight advantage to the other apply family functions. The parallel implementation is providing the best performance as we are using all cores of the machine (in this example, I am running the scripts on a 8-core MacBook Pro with 2.8 GHz intel Core i7 and 16 GB 2133MHz DDR3 RAM). We have, thoroughly, discussed the reasons behind the performance of each set of implementations in [Good, bad, ugly feature extraction](#main). 
+As figure above shows, "for loop on dataframes" has the ugliest performance at any size of the dataset. "for loop on list" and apply functions are performing better although there is not a big difference between them. The worse performance of `lapply` is because the `do.call(rbind)` function is also used to bind the results of the function. So, it does not deny it's possible & slight advantage to the other apply family functions. The parallel implementation is providing the best performance as we are using all cores of the machine (in this example, I am running the scripts on a 8-core MacBook Pro with 2.8 GHz intel Core i7 and 16 GB 2133MHz DDR3 RAM). We have, thoroughly, discussed the reasons behind the performance of each set of implementations in [Good, bad, ugly feature extraction](#main). 
 
 ### Ending
 
-We could improve the performance of extracting text feature by 6 times. we don’t want to parallelizing things that already runs really fast sequentially. In other words, it would be better to take advantage of other techniques (primitive functions, vectorization, data.table packages) before parallelizing the process.
+We have discussed about some techniques to change our R programming habbits for better performances. Those methods can also be helpful if you are dealing with memory issues on your machine, specifically by reducing the number of unnecessary duplicated objects from memory. There are other techniques available to speed up Rscript execution such as vectorization, writing C++ function using RCPP or using parallel format of apply family (like mcapply). By applying parallel computin on text dataset, we could improve the performance of extracting text feature by 6 times. That would feel awesome if we are going to use that function in a shiny app or building an APIs.
 
-So when working on code parallelization it is important to keep in mind that for very short jobs, the parallelization overhead will diminish the parallelization benefits. If we’re not sure if the parallelization of specific piece of code improves its speed, we can always check the execution time using system.time().
+Parallelization would not be an optimal solution for sequential processes and the jobs that already runs really fast. If we’re not sure if the parallelization of specific piece of code improves its speed, we can always check the execution time using `system.time()` or profilers. Taking advantage of primitive functions, vectorization and C-based packages, however, will most prbably speed up execution process in R.
 
-When we pass in our data to run a parallel task, each processors will get a copy of the data, thus it’s not going to modify the global/intial data in any way.
-
-Vectorization, writing C++ function using RCPP or using parallel format of apply family (like mcapply) or are other options to speed up the execution time in R. I did not include them here. I might end up writing another blog post for those options later.
+I hope this article could shed another light on possible pitfalls with using some functions/habbits in R (especially when the data gets larger and dirtier). I will share more as I find out my ugly habbits in R and Python (I am sure I have plenty of them).
 
 
 
