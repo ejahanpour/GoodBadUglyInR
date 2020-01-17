@@ -31,7 +31,7 @@ registerDoParallel(num_cores)
 Once upon a time in the world ... it was adequate for physicians, researchers, statisticians, data analysts, ... to
 
 a. pull up the Rstudio, 
-b. `read.csv()` csv file or `read.table` other formats, 
+b. `read.csv()` csv file or `read.table()` other formats, 
 c. for loop into rows and columns of the files 
 d. apply statistical analysis and draw inference from observations/experiments. 
 
@@ -70,7 +70,9 @@ print(paste('using fread with quote options, table dimension',
 
 As you can see above, there are Good, bad and ugly ways to read in data especially when you are dealing with large and dirty data. **I should confess that the concept of good, bad, and ugly here is dependant on dataset though seeing the advantages and disadvantages of each method can be really eye-opening**. The first two reading functions are throwing warnings and the number of rows do not match with the real data!! First thing first: `DO NOT ignore EOF within quoted string` warning as it might result in wrong analytics down in your code. If you would like to find out why, read the paragraph below, otherwise feel free to skip that and proceed to data section.
 
-*optional* But what does 'EOF within quoted string' statement tell us and why are we seeing three different row numbers on the same dataset? they are all due to quotations!! (either single or double quotes). In a perfect world, you would close any quote you "opened" earlier but we are not leaving in a perfect world! So it is possible to open a quotation mark without closing it. In addition, not all quotation markes are used for quotes, for instance `'` in `John's book` is not used for quote. In `read.table` function, the default quotes are `' and "`, thus, if the function sees one of those symbols in a row, it will look for another one to close it and if could not find it, it will go to the next row to find the match. That might cause multiple rows to be considered as one row (14,094 rows). Same story happens with `read.delim2`, the only difference is that the default quote for `read.delim2` is only `"` which reduces the chance of unclosed quotation marks and we see more rows appear (20,474 rows). Setting `quote = ''` argument will fix the issue and reduce the running time by 3rd. It is great that we are now pulling data correctly and faster! But wait!! can we do better than 10 seconds? Thanks to the `fread` function of `data.table` package, we can speed up data reading 76 times more faster.
+![](../images/EOF_meme.png)
+
+*optional* What does 'EOF within quoted string' statement tell us and why are we seeing three different row numbers on the same dataset? they are all due to quotations!! (either single or double quotes). In a perfect world, you would close any quote you "opened" earlier but we are not leaving in a perfect world! So it is possible to open a quotation mark without closing it. In addition, not all quotation markes are used for quotes, for instance `'` in `John's book` is not used for quote. In `read.table` function, the default quotes are `' and "`, thus, if the function sees one of those symbols in a row, it will look for another one to close it and if could not find it, it will go to the next row to find the match. That might cause multiple rows to be considered as one row (14,094 rows). Same story happens with `read.delim2`, the only difference is that the default quote for `read.delim2` is only `"` which reduces the chance of unclosed quotation marks and we see more rows appear (20,474 rows). Setting `quote = ''` argument will fix the issue and reduce the running time by 3rd. It is great that we are now pulling data correctly and faster! But wait!! can we do better than 10 seconds? Thanks to the `fread` function of `data.table` package, we can speed up data reading 76 times more faster.
 
 ## Plot Summary
 
@@ -93,6 +95,8 @@ extract_text_features <- function(text){
 ```
 
 ## Good, bad, ugly feature extraction {#main}
+
+![](../images/loop_meme.png)
 
 So far, we have created a function that extract "our" features on a single text. Now, it is time to go over each row in dataframe and apply the function on plot summaries (the classic application of loops). So, the first option comes to the mind is using for loop. Caution!, this could get really ugly. TL:DR: *TRY TO AVOID "FOR LOOPS" in R unless you are familiar with primitive functions or dataset is small enough*. I will briefly explain it in the next paragraph, but there is no heartbreak in skipping it.
 
@@ -193,6 +197,8 @@ ggplot(melted, aes(batch_size*index, value, color = variable)) +
 As figure above shows, "for loop on dataframes" has the ugliest performance at any size of the dataset. "for loop on list" and apply functions are performing better although there is not a big difference between them. The worse performance of `lapply` is because the `do.call(rbind)` function is also used to bind the results of the function. So, it does not deny it's possible & slight advantage to the other apply family functions. The parallel implementation is providing the best performance as we are using all cores of the machine (in this example, I am running the scripts on a 8-core MacBook Pro with 2.8 GHz intel Core i7 and 16 GB 2133MHz DDR3 RAM). We have, thoroughly, discussed the reasons behind the performance of each set of implementations in [Good, bad, ugly feature extraction](#main). 
 
 ### Ending
+
+![](../images/fast_computer.png)
 
 We have discussed about some techniques to change our R programming habbits for better performances. Those methods can also be helpful if you are dealing with memory issues on your machine, specifically by reducing the number of unnecessary duplicated objects from memory. There are other techniques available to speed up Rscript execution such as vectorization, writing C++ function using RCPP or using parallel format of apply family (like mcapply). By applying parallel computin on text dataset, we could improve the performance of extracting text feature by 6 times. That would feel awesome if we are going to use that function in a shiny app or building an APIs.
 
