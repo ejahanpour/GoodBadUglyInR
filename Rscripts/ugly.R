@@ -1,4 +1,4 @@
-library(profvis)
+source('../get_movie_name.R')
 
 extract_text_features_u <- function(file_address, keywords) {
   #' gets the keywords as input and returns the dataframe including those keywords along with the number of keywords
@@ -7,7 +7,7 @@ extract_text_features_u <- function(file_address, keywords) {
   #' @return results: a dataframe including movies with the keyword and number of words in the summary
 
   # read in the plot summaries from txt file
-  # plot_summary <- read.table(file_address, sep = '\t')
+  plot_summary <- read.table(file_address, sep = '\t')
   # concatenate keywords into one string with | in between (regular expression for "and" statement)
   # regex_word <- paste0(tolower(keywords), collapse = '|')
   # regex_word <- paste0("(?=.*", keywords, ")", collapse="")
@@ -25,8 +25,9 @@ extract_text_features_u <- function(file_address, keywords) {
   }
   # filter out and return the rows that has the keyword 
   results <- plot_summary[plot_summary$keyword == 1, c('V1', 'keyword', 'word_counts')]
-  return(results)
+  movies <- get_movie_name(as.data.frame(results))
+  return(movies)
 }
 
-profvis(tst <- extract_text_features_u(file_address = 'data/plot_summaries.txt', 
-                             keywords = c('love', 'world war')))
+# profvis(tst <- extract_text_features_u(file_address = 'data/plot_summaries.txt', 
+#                              keywords = c('love', 'world war')))
